@@ -59,7 +59,11 @@ def montar_estrutura_e_salvar(caminho_pdf, dados):
 
     os.makedirs(caminho_final, exist_ok=True)
 
-    nome_arquivo = f"{dados['cnpj']} - {dados['nome_obrigacao']} {mes} {dados['valor']}.pdf"
+    if dados["valor"]:
+        nome_arquivo = f"{dados['cnpj']} - {dados['nome_obrigacao']} {mes} {dados['valor']}.pdf"
+    else:
+        nome_arquivo = f"{dados['cnpj']} - {dados['nome_obrigacao']} {mes}.pdf"
+
     destino = os.path.join(caminho_final, nome_arquivo)
 
     if os.path.exists(destino):
@@ -154,10 +158,63 @@ def extrator_rest_goiania(texto):
         "nome_obrigacao": "REST"
     }
 
+# ======================================================
+# 🔹 DMS GOIÂNIA (SEGUNDO PADRÃO)
+# ======================================================
+
+def detector_dms_goiania(texto):
+    primeira_linha = texto.split("\n")[0]
+    return "Prefeitura Municipal de Goiânia - GO Serviços Prestados" in primeira_linha
+
+def extrator_dms_goiania(texto):
+
+    linhas = texto.split("\n")
+
+    # 🔹 Linha que contém CNPJ formatado
+    linha_cnpj = None
+    for linha in linhas:
+        if re.search(r"\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}", linha):
+            linha_cnpj = linha
+            break
+
+    if not linha_cnpj:
+        raise Exception("CNPJ não encontrado na DMS.")
+
+    cnpj_match = re.search(r"\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}", linha_cnpj)
+    cnpj_formatado = cnpj_match.group(0)
+
+    # remover pontuação para padronizar pasta
+    cnpj = re.sub(r"\D", "", cnpj_formatado)
+
+    # 🔹 Datas (mesmo extrator robusto do REST)
+    data_inicial, data_final, data_geracao = extrair_datas_rest(texto)
+
+    competencia_ok = validar_competencia(data_inicial, data_final)
+
+    if not competencia_ok:
+        messagebox.showwarning(
+            "Competência divergente",
+            f"Período detectado: {data_inicial} até {data_final}"
+        )
+
+    return {
+        "cnpj": cnpj,
+        "valor": None,  # DMS não tem valor no nome
+        "data_inicial": data_inicial,
+        "data_final": data_final,
+        "data_geracao": data_geracao,
+        "departamento": "Fiscal",
+        "esfera": "Municipal",
+        "nome_obrigacao": "DMS"
+    }
 
 
+# ======================================================
+# 🔹 REGISTRO DE PADRÕES
+# ======================================================
 
 registrar_padrao("REST_GOIANIA", detector_rest_goiania, extrator_rest_goiania)
+registrar_padrao("DMS_GOIANIA", detector_dms_goiania, extrator_dms_goiania)
 
 
 # ======================================================
